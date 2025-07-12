@@ -1,16 +1,17 @@
 # wmatalive
 
-A new Flutter project.
+This project was created using [Flutter](https://flutter.dev/).
 
-## Getting Started
+```
+flutter create --org com.nippyapps --platforms android \
+    --project-name wmatalive wmata-live
+```
 
-This project is a starting point for a Flutter application.
+# Development
 
-A few resources to get you started if this is your first Flutter project:
+Build and install an APK on a connected device
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```console
+flutter build apk --target-platform android-arm64 && \
+    adb install build/app/outputs/flutter-apk/app-release.apk
+```
