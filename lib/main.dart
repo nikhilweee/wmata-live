@@ -3,7 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'models.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
-import 'wmata_api.dart';
+import 'api.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,8 +24,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Use BusStop from models.dart
-
 class BusStopMapPage extends StatefulWidget {
   const BusStopMapPage({super.key});
 
@@ -35,8 +33,10 @@ class BusStopMapPage extends StatefulWidget {
 
 class _BusStopMapPageState extends State<BusStopMapPage> {
   final Completer<GoogleMapController> _mapController = Completer();
-  LatLng? _userLocation;
+  LatLng? _userLocation = const LatLng(38.892092, -77.036551);
   List<BusStop> _stops = [];
+  bool _mapMoved = false;
+  CameraPosition? _lastCameraPosition;
 
   Future<void> _getLocationAndStops() async {
     // Request location permission and get user location
@@ -72,7 +72,6 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
       _stops = stops;
     });
     final controller = await _mapController.future;
-    if (!mounted) return;
     controller.animateCamera(CameraUpdate.newLatLng(userLoc));
   }
 
@@ -118,35 +117,89 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
     );
   }
 
+  Future<void> _searchAreaStops() async {
+    if (_lastCameraPosition == null) return;
+    final center = _lastCameraPosition!.target;
+    List<BusStop> stops = [];
+    try {
+      stops = await WmataApi().getNearbyStops(
+        center.latitude,
+        center.longitude,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to fetch stops: $e')));
+    }
+    setState(() {
+      _userLocation = center;
+      _stops = stops;
+      _mapMoved = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('WMATA Bus ETA')),
-      body: _userLocation == null
-          ? Center(child: Text('Tap the button to find nearby stops'))
-          : GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: _userLocation!,
-                zoom: 15,
-              ),
-              zoomControlsEnabled: false,
-              myLocationEnabled: true,
-              markers: _stops
-                  .map(
-                    (stop) => Marker(
-                      markerId: MarkerId(stop.stopId),
-                      position: LatLng(stop.lat, stop.lon),
-                      infoWindow: InfoWindow(title: stop.name),
-                      onTap: () => _onMarkerTapped(stop),
-                    ),
-                  )
-                  .toSet(),
-              onMapCreated: (controller) {
-                if (!_mapController.isCompleted) {
-                  _mapController.complete(controller);
-                }
-              },
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _userLocation!,
+              zoom: 15,
             ),
+            myLocationEnabled: true,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            markers: _stops
+                .map(
+                  (stop) => Marker(
+                    markerId: MarkerId(stop.stopId),
+                    position: LatLng(stop.lat, stop.lon),
+                    infoWindow: InfoWindow(title: stop.name),
+                    onTap: () => _onMarkerTapped(stop),
+                  ),
+                )
+                .toSet(),
+            onMapCreated: (controller) {
+              if (!_mapController.isCompleted) {
+                _mapController.complete(controller);
+              }
+            },
+            onCameraMove: (position) {
+              _lastCameraPosition = position;
+              if (!_mapMoved) {
+                setState(() {
+                  _mapMoved = true;
+                });
+              }
+            },
+          ),
+          if (_mapMoved)
+            Positioned(
+              top: 24,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: ElevatedButton(
+                  onPressed: _searchAreaStops,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  child: const Text('Search this area'),
+                ),
+              ),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _getLocationAndStops,
         child: const Icon(Icons.location_searching),
