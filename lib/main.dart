@@ -4,6 +4,7 @@ import 'models.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'api.dart';
+import 'widgets.dart';
 
 void main() {
   runApp(const MyApp());
@@ -96,19 +97,43 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(stop.name, style: Theme.of(context).textTheme.titleLarge),
+            Label(
+              'Stop #${stop.stopId}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(stop.name, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             if (predictions.isEmpty)
-              const Text('No upcoming arrivals found.')
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(vertical: 32.0),
+                child: Text(
+                  'No upcoming arrivals found.',
+                  textAlign: TextAlign.center,
+                ),
+              )
             else
               ...predictions.map<Widget>(
                 (prediction) => ListTile(
                   leading: const Icon(Icons.directions_bus),
-                  title: Text(prediction.routeId),
-                  subtitle: Text(
-                    '${prediction.directionText}\nArriving in ${prediction.minutes} min',
+                  title: Text(
+                    prediction.routeId,
+                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  trailing: Text('Bus ${prediction.vehicleId}'),
+                  subtitle: Text(prediction.directionText),
+                  trailing: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Label('Bus #${prediction.vehicleId}'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'in ${prediction.minutes} min',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],
@@ -137,6 +162,11 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
       _stops = stops;
       _mapMoved = false;
     });
+    if (stops.isEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No stops found in this area.')),
+      );
+    }
   }
 
   @override
@@ -151,6 +181,7 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
               zoom: 15,
             ),
             myLocationEnabled: true,
+            myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
             markers: _stops
