@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'api.dart';
 import 'widgets.dart';
+import 'package:widget_to_marker/widget_to_marker.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,10 +35,22 @@ class BusStopMapPage extends StatefulWidget {
 
 class _BusStopMapPageState extends State<BusStopMapPage> {
   final Completer<GoogleMapController> _mapController = Completer();
-  LatLng? _userLocation = const LatLng(38.892092, -77.036551);
+  LatLng? _userLocation = const LatLng(38.907247, -77.036532);
   List<BusStop> _stops = [];
   bool _mapMoved = false;
   CameraPosition? _lastCameraPosition;
+  String? _mapStyle;
+  @override
+  void initState() {
+    super.initState();
+    _loadMapStyle();
+  }
+
+  Future<void> _loadMapStyle() async {
+    _mapStyle = await DefaultAssetBundle.of(
+      context,
+    ).loadString('assets/map_style.json');
+  }
 
   Future<void> _getLocationAndStops() async {
     // Request location permission and get user location
@@ -73,7 +86,9 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
       _stops = stops;
     });
     final controller = await _mapController.future;
-    controller.animateCamera(CameraUpdate.newLatLng(userLoc));
+    controller.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: userLoc, zoom: 15)),
+    );
   }
 
   void _onMarkerTapped(BusStop stop) async {
@@ -169,43 +184,80 @@ class _BusStopMapPageState extends State<BusStopMapPage> {
     }
   }
 
+  Future<BitmapDescriptor> _createCustomMarker() async {
+    final markerWidget = Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: Color(0xFFC2402A),
+            shape: BoxShape.circle,
+          ),
+        ),
+        Icon(Icons.directions_bus, color: Colors.white, size: 48),
+      ],
+    );
+    return await markerWidget.toBitmapDescriptor(
+      logicalSize: const Size(64, 64),
+      imageSize: const Size(64, 64),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('WMATA Bus ETA')),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: _userLocation!,
-              zoom: 15,
-            ),
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            markers: _stops
-                .map(
-                  (stop) => Marker(
-                    markerId: MarkerId(stop.stopId),
-                    position: LatLng(stop.lat, stop.lon),
-                    infoWindow: InfoWindow(title: stop.name),
-                    onTap: () => _onMarkerTapped(stop),
-                  ),
-                )
-                .toSet(),
-            onMapCreated: (controller) {
-              if (!_mapController.isCompleted) {
-                _mapController.complete(controller);
-              }
-            },
-            onCameraMove: (position) {
-              _lastCameraPosition = position;
-              if (!_mapMoved) {
-                setState(() {
-                  _mapMoved = true;
-                });
-              }
+          FutureBuilder<BitmapDescriptor>(
+            future: _createCustomMarker(),
+            builder: (context, snapshot) {
+              final customMarker =
+                  snapshot.data ?? BitmapDescriptor.defaultMarker;
+              return GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: _userLocation!,
+                  zoom: 15,
+                ),
+                myLocationEnabled: true,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                mapToolbarEnabled: false,
+                buildingsEnabled: false,
+                markers: _stops
+                    .map(
+                      (stop) => Marker(
+                        markerId: MarkerId(stop.stopId),
+                        position: LatLng(stop.lat, stop.lon),
+                        icon: customMarker,
+                        anchor: Offset(0.5, 0.5),
+                        infoWindow: InfoWindow(title: stop.name),
+                        onTap: () => _onMarkerTapped(stop),
+                      ),
+                    )
+                    .toSet(),
+                style: _mapStyle,
+                onMapCreated: (controller) async {
+                  if (!_mapController.isCompleted) {
+                    _mapController.complete(controller);
+                  }
+                  // Load style if not already loaded
+                  _mapStyle ??= await DefaultAssetBundle.of(
+                    context,
+                  ).loadString('assets/map_style.json');
+                  // No need to call setMapStyle, handled by style property
+                },
+                onCameraMove: (position) {
+                  _lastCameraPosition = position;
+                  if (!_mapMoved) {
+                    setState(() {
+                      _mapMoved = true;
+                    });
+                  }
+                },
+              );
             },
           ),
           if (_mapMoved)
